@@ -1,16 +1,17 @@
 import os
 import re
 import requests
-from dotenv import load_dotenv
 from gdshortener import ISGDShortener
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     ContextTypes, filters, ConversationHandler
 )
+from keep_alive import keep_alive
+keep_alive()
 
-# Load environment variables
-load_dotenv()
+# from dotenv import load_dotenv
+# load_dotenv()
 
 # Bot token
 TOKEN = os.getenv("TOKEN")
