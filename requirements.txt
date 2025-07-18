@@ -1,7 +1,6 @@
 aiogram==2.23.1
+requests
 flask
 python-telegram-bot
 gdshortener
 python-dotenv~=1.0.1
-
-
