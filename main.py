@@ -79,13 +79,18 @@ async def custom_get_alias(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         short = gds.shorten(url, custom_url=alias)[0]
         await update.message.reply_text(f"🔰*Custom Short URL*🔰\n\n"
-                                        f"*🔗 Link:* {short}",
-                                        parse_mode="Markdown"
-                                        )
+                                      f"*🔗 Link:* {short}",
+                                      parse_mode="Markdown"
+                                      )
+        return ConversationHandler.END
     except Exception as e:
-        message = extract_error_message(str(e))
-        await update.message.reply_text(f"❌ Error: {message}")
-    return ConversationHandler.END
+        error_message = extract_error_message(str(e))
+        if "The shortened URL you picked already exists" in error_message:
+            await update.message.reply_text(f"❌ This alias is already taken. Please enter a different one:")
+            return CUSTOM_ALIAS  # Stay in the same state to get new alias
+        else:
+            await update.message.reply_text(f"❌ Error: {error_message}")
+            return ConversationHandler.END
 
 # --- LogStats Conversation ---
 async def logstats_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -192,3 +197,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
