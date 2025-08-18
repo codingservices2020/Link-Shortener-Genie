@@ -90,8 +90,9 @@ async def custom_get_alias(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return CUSTOM_ALIAS  # Stay in the same state to get new alias
         else:
             await update.message.reply_text(f"❌ Error: {error_message}")
-            return ConversationHandler.END
-
+            await update.message.reply_text(f"Please enter a different one:")
+            return CUSTOM_ALIAS
+            
 # --- LogStats Conversation ---
 async def logstats_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Please send the URL to shorten whose stats you want to monitor.")
@@ -197,4 +198,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
