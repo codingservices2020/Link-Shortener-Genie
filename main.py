@@ -12,11 +12,10 @@ from shortio import (
     get_stats, get_qr_for_url,
     SHORTIO_DOMAIN
 )
+from dotenv import load_dotenv
+load_dotenv()
 from keep_alive import keep_alive
 keep_alive()
-
-# from dotenv import load_dotenv
-# load_dotenv()
 
 
 # Bot token
@@ -46,27 +45,19 @@ BULB_EMOJI = '<tg-emoji emoji-id="5422439311196834318">💡</tg-emoji>'
 # Regex to detect all URLs in a message
 URL_PATTERN = re.compile(r'https?://[^\s]+')
 
-# States for conversations
-CUSTOM_URL, CUSTOM_ALIAS = range(2)
-LOGSTATS_URL = range(1)
-EXPAND_URL = range(1)
-QRCODE_URL = range(1)
-EDIT_TARGET, EDIT_NEW_SLUG = range(2)
+# Unique state IDs are essential when using one ConversationHandler.
+(CUSTOM_URL, CUSTOM_ALIAS, LOGSTATS_URL, EXPAND_URL,
+ QRCODE_URL, EDIT_TARGET, EDIT_NEW_SLUG) = range(7)
 
 
 # --- Start Command ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = (
-        "👋 Welcome to the Short.io URL Shortener Bot!\n\n"
-        "• Send a URL (or multiple URLs at once) to shorten them.\n"
-        "• Use /custom to create a custom short link.\n"
-        "• Use /editslug to change the shortcode (slug) of an existing link.\n"
-        "• Use /QRcode to generate a QR code for any link.\n"
-        "• Use /logstats to check click stats.\n"
-        "• Use /expand to see where a short link leads.\n"
-        "• Use /help for the full command list."
+    await update.message.reply_text(
+        f"{NAMASTE_EMOJI} Welcome to the Short.io URL Shortener Bot!\n\n"
+        f"{FIRE_EMOJI} Send a URL (or multiple URLs at once) to shorten them.\n", 
+        parse_mode="HTML"
     )
-    await update.message.reply_text(msg)
+    return ConversationHandler.END
 
 
 # --- Default Shortener (Handles single or multiple URLs) ---
@@ -75,7 +66,10 @@ async def shorten(update: Update, context: ContextTypes.DEFAULT_TYPE):
     urls = URL_PATTERN.findall(text)
 
     if not urls:
-        await update.message.reply_text("❌ Please send valid URL(s) starting with http:// or https://")
+        await update.message.reply_text(
+            f"{CANCEL_EMOJI} Please send valid URL(s) starting with http:// or https://",
+            parse_mode="HTML"
+            )
         return
 
     # Single URL
@@ -91,7 +85,10 @@ async def shorten(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         else:
             error_message = result.get("error", "Unknown error")
-            await update.message.reply_text(f"❌ Error: {error_message}")
+            await update.message.reply_text(
+                f"{CROSS_EMOJI} Error: {error_message}",
+                parse_mode="HTML"
+                )
         return
 
     # Multiple URLs (Bulk shortening)
@@ -382,6 +379,8 @@ async def qrcode_get_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Cancel ---
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    for key in ("custom_url", "edit_target", "edit_old_slug", "edit_orig_url"):
+        context.user_data.pop(key, None)
     await update.message.reply_text("Operation cancelled.")
     return ConversationHandler.END
 
@@ -401,6 +400,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"<b>{BULB_EMOJI} Tip:</b> You can also send multiple URLs in a single message to shorten them all at once!",
         parse_mode="HTML"
     )
+    return ConversationHandler.END
 
 
 # --- Main Function ---
@@ -411,56 +411,36 @@ def main():
 
     app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("cancel", cancel))
-
-    # Conversation handlers
-    app.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("custom", custom_start)],
+    # A single conversation manager avoids overlapping conversations and ensures
+    # /cancel reaches the active conversation rather than a global handler.
+    conversation = ConversationHandler(
+        entry_points=[
+            CommandHandler("custom", custom_start),
+            CommandHandler(["editslug", "edit", "slug", "updateslug"], editslug_start),
+            CommandHandler("logstats", logstats_start),
+            CommandHandler("expand", expand_start),
+            CommandHandler(["QRcode", "qrcode", "qr"], qrcode_start),
+        ],
         states={
             CUSTOM_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, custom_get_url)],
             CUSTOM_ALIAS: [MessageHandler(filters.TEXT & ~filters.COMMAND, custom_get_alias)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)]
-    ))
-
-    app.add_handler(ConversationHandler(
-        entry_points=[
-            CommandHandler(["editslug", "edit", "slug", "updateslug"], editslug_start)
-        ],
-        states={
             EDIT_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, editslug_get_target)],
             EDIT_NEW_SLUG: [MessageHandler(filters.TEXT & ~filters.COMMAND, editslug_get_new_slug)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)]
-    ))
-
-    app.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("logstats", logstats_start)],
-        states={
             LOGSTATS_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, logstats_get_url)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)]
-    ))
-
-    app.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("expand", expand_start)],
-        states={
             EXPAND_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, expand_get_url)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)]
-    ))
-
-    app.add_handler(ConversationHandler(
-        entry_points=[
-            CommandHandler(["QRcode", "qrcode", "qr", "QR"], qrcode_start)
-        ],
-        states={
             QRCODE_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, qrcode_get_url)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)]
-    ))
+        fallbacks=[
+            CommandHandler("cancel", cancel),
+            CommandHandler("start", start),
+            CommandHandler("help", help_command),
+        ],
+        allow_reentry=True,
+    )
+    app.add_handler(conversation)
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("cancel", cancel))
 
     # Default message handler for plain text URLs (single or multi)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, shorten))
